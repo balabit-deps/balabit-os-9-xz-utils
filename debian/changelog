@@ -1,3 +1,13 @@
+xz-utils (5.2.5-2ubuntu1.1) jammy-security; urgency=medium
+
+  * SECURITY UPDATE: heap buffer overflow
+    - debian/patches/CVE-2026-34743.patch: adds a check to
+      lzma_index_prealloc() to default to a safe size when decoding empty
+      indexes in src/liblzma/common/index.c.
+    - CVE-2026-34743
+
+ -- Ian Constantin <ian.constantin@canonical.com>  Thu, 28 May 2026 19:06:40 +0300
+
 xz-utils (5.2.5-2ubuntu1) jammy; urgency=medium
 
   * SECURITY UPDATE: arbitrary file overwrite or code execution with

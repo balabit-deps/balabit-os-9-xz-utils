@@ -8,3 +8,4 @@
 0008-xz-Make-keep-accept-symlinks-hardlinks-and-setuid-se.patch
 0009-Scripts-Fix-exit-status-of-xzgrep.patch
 CVE-2022-1271.patch
+CVE-2026-34743.patch
