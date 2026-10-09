@@ -1,0 +1,141 @@
+Backport of:
+
+From ff834f25ae4f9b3e6270d41b4c843b8b1183346c Mon Sep 17 00:00:00 2001
+From: Lasse Collin <lasse.collin@tukaani.org>
+Date: Wed, 9 Sep 2026 14:14:40 +0300
+Subject: [PATCH] Tests: Test lzma_alone_decoder() reuse after dictionary
+ allocation failure
+
+This test crashes if both of the two previous commits are reverted.
+
+[Ubuntu note: adapted the upstream test to this release's pre-tuktest
+ tests.h framework, embedding the .lzma input bytes in place of the missing
+ upstream fixture file.
+-- mrmajumder]
+---
+ tests/Makefile.am          |  3 ++-
+ tests/test_alone_decoder.c |  98 +++++++++++++++++++++++++++++++++
+ 2 files changed, 101 insertions(+), 1 deletion(-)
+ create mode 100644 tests/test_alone_decoder.c
+
+--- a/tests/Makefile.am
++++ b/tests/Makefile.am
+@@ -36,7 +36,8 @@ check_PROGRAMS = \
+ 	test_filter_flags \
+ 	test_block_header \
+ 	test_index \
+-	test_bcj_exact_size
++	test_bcj_exact_size \
++	test_alone_decoder
+ 
+ TESTS = \
+ 	test_check \
+@@ -45,6 +46,7 @@ TESTS = \
+ 	test_block_header \
+ 	test_index \
+ 	test_bcj_exact_size \
++	test_alone_decoder \
+ 	test_files.sh \
+ 	test_compress.sh
+ 
+--- /dev/null
++++ b/tests/test_alone_decoder.c
+@@ -0,0 +1,98 @@
++///////////////////////////////////////////////////////////////////////////////
++//
++/// \file       test_alone_decoder.c
++/// \brief      Tests lzma_alone_decoder()
++//
++//  Author:     Lasse Collin
++//
++///////////////////////////////////////////////////////////////////////////////
++
++#include "tests.h"
++
++#include <stdlib.h>
++#include <string.h>
++
++
++#define MEMLIMIT (16U << 20)
++#define TOO_BIG_ALLOC (1U << 20)
++
++
++// Valid .lzma file: 4 KiB dictionary, uncompressed size unknown
++// (end-of-payload marker), payload "Hello world!\n". Upstream's test
++// loads this from files/good-unknown_size-with_eopm.lzma which doesn't
++// exist in this version of xz, so the bytes are embedded here.
++static const uint8_t good_lzma[] = {
++	0x5D, 0x00, 0x10, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
++	0xFF, 0xFF, 0x00, 0x24, 0x19, 0x49, 0x98, 0x6F, 0x10, 0x19, 0xC6,
++	0xD7, 0x31, 0xEB, 0x36, 0xD7, 0xF0, 0xF7, 0x30, 0x66, 0xFF, 0xFF,
++	0x29, 0xD0, 0x00, 0x00
++};
++
++
++static void *
++my_alloc(void *opaque, size_t nmemb, size_t size)
++{
++	(void)opaque;
++	(void)nmemb;
++
++	if (size >= TOO_BIG_ALLOC)
++		return NULL;
++
++	return malloc(size);
++}
++
++
++static lzma_allocator my_allocator = { &my_alloc, NULL, NULL };
++
++
++// LP#2170056 / GHSA-5qpq-xqfv-j9pg: an invalid write occurred if a
++// decoder was reinitialized after a memory allocation failure.
++static void
++test_reuse_after_failure(void)
++{
++	// 4 KiB dictionary
++	uint8_t small_dict[sizeof(good_lzma)];
++	memcpy(small_dict, good_lzma, sizeof(good_lzma));
++
++	// 8 MiB dictionary
++	uint8_t big_dict[sizeof(good_lzma)];
++	memcpy(big_dict, good_lzma, sizeof(good_lzma));
++	big_dict[2] = 0x00;
++	big_dict[3] = 0x80;
++
++	uint8_t out[256];
++
++	lzma_stream strm = LZMA_STREAM_INIT;
++	strm.allocator = &my_allocator;
++
++	expect(lzma_alone_decoder(&strm, MEMLIMIT) == LZMA_OK);
++	strm.next_in = small_dict;
++	strm.avail_in = sizeof(small_dict);
++	strm.next_out = out;
++	strm.avail_out = sizeof(out);
++	expect(lzma_code(&strm, LZMA_FINISH) == LZMA_STREAM_END);
++
++	expect(lzma_alone_decoder(&strm, MEMLIMIT) == LZMA_OK);
++	strm.next_in = big_dict;
++	strm.avail_in = sizeof(big_dict);
++	strm.next_out = out;
++	strm.avail_out = sizeof(out);
++	expect(lzma_code(&strm, LZMA_FINISH) == LZMA_MEM_ERROR);
++
++	expect(lzma_alone_decoder(&strm, MEMLIMIT) == LZMA_OK);
++	strm.next_in = small_dict;
++	strm.avail_in = sizeof(small_dict);
++	strm.next_out = out;
++	strm.avail_out = sizeof(out);
++	expect(lzma_code(&strm, LZMA_FINISH) == LZMA_STREAM_END);
++
++	lzma_end(&strm);
++}
++
++
++int
++main(void)
++{
++	test_reuse_after_failure();
++	return 0;
++}

@@ -9,3 +9,6 @@
 0009-Scripts-Fix-exit-status-of-xzgrep.patch
 CVE-2022-1271.patch
 CVE-2026-34743.patch
+LP-2170056_1.patch
+LP-2170056_2.patch
+LP-2170056_3.patch

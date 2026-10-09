@@ -1,3 +1,18 @@
+xz-utils (5.2.5-2ubuntu1.2) jammy-security; urgency=medium
+
+  * SECURITY UPDATE: invalid memory write during decoder reinitialization
+    after allocation failure (LP: #2170056)
+    - debian/patches/LP-2170056_1.patch: Make lzma_lz_decoder_init()
+      safe to reinit after alloc failure in src/liblzma/lz/lz_decoder.c.
+    - debian/patches/LP-2170056_2.patch: Clean up after a filter chain
+      initialization error in src/liblzma/common/alone_decoder.c.
+    - debian/patches/LP-2170056_3.patch: Test lzma_alone_decoder() reuse
+      after dictionary allocation failure in tests/Makefile.am,
+      tests/test_alone_decoder.c.
+    - No CVE number
+
+ -- Shafayat Hossain Majumder <shafayat.majumder@canonical.com>  Fri, 09 Oct 2026 11:54:08 -0400
+
 xz-utils (5.2.5-2ubuntu1.1) jammy-security; urgency=medium
 
   * SECURITY UPDATE: heap buffer overflow

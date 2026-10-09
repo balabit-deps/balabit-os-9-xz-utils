@@ -1,0 +1,49 @@
+From 781afb726a8e9ca17e6dde437ec9fbbe63a690a6 Mon Sep 17 00:00:00 2001
+From: Lasse Collin <lasse.collin@tukaani.org>
+Date: Wed, 9 Sep 2026 14:14:40 +0300
+Subject: [PATCH] liblzma: Clean up after a filter chain initialization error
+
+Filter coders are initialized using lzma_next_filter_init(). If filter
+chain initialization fails, the entire filter chain should be cleaned up
+with lzma_next_end(). lzma_raw_encoder_init() and lzma_raw_decoder_init()
+have always done this via lzma_raw_coder_init() in filter_common.c.
+(Separate cleanup is weird, but it must have made sense to the young me.)
+
+The following decoders initialize LZMA1 filter directly without using the
+raw filter chain API. This avoids needlessly pulling in all other filters
+when a program is linked against static liblzma. These functions didn't
+call lzma_next_end() after an initialization error, which left the state
+available for later reinitialization.
+
+  - lzma_alone_decoder()
+  - lzma_auto_decoder() [*]
+
+[*] lzma_auto_decoder() is only indirectly affected due to
+    lzma_alone_decoder() function. lzma_auto_decoder() itself doesn't
+    need a fix.
+
+There are also encoder functions that initialize the LZMA1 encoder
+directly. They don't have this issue because the whole lzma_stream
+is cleaned up when encoder initialization fails.
+
+Reported-by: GitHub user christos-cantina-security (christos-spearbit)
+(cherry picked from commit e5e63d50eac1b4357a5a7a0abd3c5f99a5c47881)
+
+---
+ src/liblzma/common/alone_decoder.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+--- a/src/liblzma/common/alone_decoder.c
++++ b/src/liblzma/common/alone_decoder.c
+@@ -141,8 +141,10 @@ alone_decode(void *coder_ptr, const lzma
+ 
+ 		const lzma_ret ret = lzma_next_filter_init(&coder->next,
+ 				allocator, filters);
+-		if (ret != LZMA_OK)
++		if (ret != LZMA_OK) {
++			lzma_next_end(&coder->next, allocator);
+ 			return ret;
++		}
+ 
+ 		// Use a hack to set the uncompressed size.
+ 		lzma_lz_decoder_uncompressed(coder->next.coder,
